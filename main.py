@@ -1,4 +1,5 @@
 import asyncio
+from io import BytesIO
 import logging
 import os
 from dataclasses import dataclass
@@ -15,8 +16,8 @@ from aiogram.types import CallbackQuery, ChatMemberUpdated, InlineKeyboardButton
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from dotenv import load_dotenv
-from fastapi import FastAPI, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import FastAPI, Form, HTTPException, Request
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 from supabase import Client, create_client
@@ -319,6 +320,30 @@ def redirect(path: str) -> RedirectResponse:
     return RedirectResponse(path, status_code=303)
 
 
+def receipt_media_type(file_type: str | None) -> str:
+    if file_type == "photo":
+        return "image/jpeg"
+    return "application/octet-stream"
+
+
+async def telegram_file_response(file_id: str | None, file_type: str | None, filename_prefix: str) -> Response:
+    if not file_id:
+        raise HTTPException(status_code=404, detail="Receipt not found")
+    try:
+        telegram_file = await bot.get_file(file_id)
+        buffer = BytesIO()
+        await bot.download_file(telegram_file.file_path, destination=buffer)
+    except Exception as exc:
+        logger.warning("Could not download Telegram receipt file", exc_info=True)
+        raise HTTPException(status_code=502, detail="Could not download receipt") from exc
+    extension = "jpg" if file_type == "photo" else "bin"
+    return Response(
+        content=buffer.getvalue(),
+        media_type=receipt_media_type(file_type),
+        headers={"Content-Disposition": f'inline; filename="{filename_prefix}.{extension}"'},
+    )
+
+
 @app.get("/", response_class=HTMLResponse, response_model=None)
 async def root(request: Request):
     if auth_required(request):
@@ -392,12 +417,120 @@ async def dashboard_renew_today(request: Request, telegram_id: int):
     return redirect("/dashboard")
 
 
+@app.post("/dashboard/users/{telegram_id}/renew-from-expiry", response_model=None)
+async def dashboard_renew_from_expiry(request: Request, telegram_id: int):
+    if not auth_required(request):
+        return redirect("/login")
+    user = get_user(telegram_id)
+    start = parse_db_date(user.get("expiry_date")) if user else None
+    if not start:
+        start = today_local()
+    expiry = start + timedelta(days=30)
+    supabase.table("telegram_users").update(
+        {
+            "status": "active",
+            "membership_start_date": start.isoformat(),
+            "expiry_date": expiry.isoformat(),
+            "updated_at": now_iso(),
+        }
+    ).eq("telegram_id", telegram_id).execute()
+    return redirect("/dashboard")
+
+
 @app.post("/dashboard/users/{telegram_id}/mark-inactive", response_model=None)
 async def dashboard_mark_inactive(request: Request, telegram_id: int):
     if not auth_required(request):
         return redirect("/login")
     supabase.table("telegram_users").update({"status": "inactive", "updated_at": now_iso()}).eq("telegram_id", telegram_id).execute()
     return redirect("/dashboard")
+
+
+@app.post("/dashboard/users/{telegram_id}/mark-paid", response_model=None)
+async def dashboard_mark_paid(request: Request, telegram_id: int):
+    if not auth_required(request):
+        return redirect("/login")
+    supabase.table("telegram_users").update(
+        {"payment_status": "paid", "last_payment_at": now_iso(), "updated_at": now_iso()}
+    ).eq("telegram_id", telegram_id).execute()
+    return redirect("/dashboard")
+
+
+@app.post("/dashboard/users/{telegram_id}/mark-pending", response_model=None)
+async def dashboard_mark_pending(request: Request, telegram_id: int):
+    if not auth_required(request):
+        return redirect("/login")
+    supabase.table("telegram_users").update({"payment_status": "pending_review", "updated_at": now_iso()}).eq(
+        "telegram_id", telegram_id
+    ).execute()
+    return redirect("/dashboard")
+
+
+@app.post("/dashboard/users/{telegram_id}/needs-new-receipt", response_model=None)
+async def dashboard_needs_new_receipt(request: Request, telegram_id: int):
+    if not auth_required(request):
+        return redirect("/login")
+    supabase.table("telegram_users").update(
+        {
+            "payment_status": "needs_new_receipt",
+            "needs_new_receipt_at": now_iso(),
+            "notes": "Admin requested another receipt from dashboard",
+            "updated_at": now_iso(),
+        }
+    ).eq("telegram_id", telegram_id).execute()
+    return redirect("/dashboard")
+
+
+@app.post("/dashboard/users/{telegram_id}/reject-payment", response_model=None)
+async def dashboard_reject_payment(request: Request, telegram_id: int):
+    if not auth_required(request):
+        return redirect("/login")
+    supabase.table("telegram_users").update(
+        {
+            "payment_status": "rejected",
+            "rejected_at": now_iso(),
+            "notes": "Payment rejected from dashboard",
+            "updated_at": now_iso(),
+        }
+    ).eq("telegram_id", telegram_id).execute()
+    return redirect("/dashboard")
+
+
+@app.get("/dashboard/users/{telegram_id}/receipt", response_model=None)
+async def dashboard_user_receipt(request: Request, telegram_id: int):
+    if not auth_required(request):
+        return redirect("/login")
+    user = get_user(telegram_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    file_id = user.get("pending_payment_file_id")
+    file_type = user.get("pending_payment_file_type")
+    if not file_id:
+        history = (
+            supabase.table("payment_history")
+            .select("*")
+            .eq("telegram_id", telegram_id)
+            .order("created_at", desc=True)
+            .limit(10)
+            .execute()
+            .data
+            or []
+        )
+        history = [row for row in history if row.get("receipt_file_id")]
+        if history:
+            file_id = history[0].get("receipt_file_id")
+            file_type = history[0].get("receipt_file_type")
+    return await telegram_file_response(file_id, file_type, f"receipt-{telegram_id}")
+
+
+@app.get("/dashboard/payments/{payment_id}/receipt", response_model=None)
+async def dashboard_payment_receipt(request: Request, payment_id: int):
+    if not auth_required(request):
+        return redirect("/login")
+    result = supabase.table("payment_history").select("*").eq("id", payment_id).limit(1).execute()
+    payment = result.data[0] if result.data else None
+    if not payment:
+        raise HTTPException(status_code=404, detail="Payment not found")
+    return await telegram_file_response(payment.get("receipt_file_id"), payment.get("receipt_file_type"), f"payment-{payment_id}-receipt")
 
 
 @app.get("/dashboard/users/{telegram_id}/history", response_class=HTMLResponse, response_model=None)
