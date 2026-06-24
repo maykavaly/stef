@@ -1,51 +1,136 @@
 <!doctype html>
-<html lang="en">
+<html lang="es">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Payment History</title>
+  <title>Historial de pagos</title>
   <style>
-    body { margin: 0; font-family: Arial, sans-serif; background: #f6f7f9; color: #1f2937; }
-    header { background: #111827; color: #fff; padding: 16px 24px; }
-    main { padding: 24px; }
-    table { width: 100%; border-collapse: collapse; background: #fff; }
-    th, td { padding: 10px; border-bottom: 1px solid #e5e7eb; text-align: left; }
-    th { font-size: 12px; text-transform: uppercase; color: #6b7280; background: #f9fafb; }
-    a { color: #2563eb; }
-    .badge { display: inline-block; padding: 3px 8px; border-radius: 999px; font-size: 12px; background: #dcfce7; color: #166534; }
+    :root {
+      --bg: #f5f7fb;
+      --panel: #ffffff;
+      --line: #dfe5ee;
+      --text: #172033;
+      --muted: #667085;
+      --dark: #162033;
+      --blue: #1d4ed8;
+      --green-bg: #dcfce7;
+      --green-text: #166534;
+      --gray-bg: #eef2f7;
+      --gray-text: #344054;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Arial, sans-serif; background: var(--bg); color: var(--text); }
+    header { background: var(--dark); color: #fff; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+    main { padding: 22px; }
+    a { color: var(--blue); }
+    .summary { margin-bottom: 16px; display: grid; gap: 4px; }
+    .muted { color: var(--muted); font-size: 12px; }
+    .table-wrap { overflow-x: auto; border: 1px solid var(--line); background: var(--panel); }
+    table { width: 100%; border-collapse: collapse; min-width: 980px; }
+    th, td { padding: 11px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); background: #f8fafc; }
+    tr:last-child td { border-bottom: 0; }
+    button, .button {
+      min-height: 28px;
+      padding: 5px 8px;
+      border: 1px solid #cfd6e0;
+      border-radius: 6px;
+      background: #fff;
+      color: var(--text);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
+      font: inherit;
+      font-size: 12px;
+    }
+    .button { color: var(--blue); border-color: #bfdbfe; background: #eff6ff; }
+    .badge { display: inline-flex; width: fit-content; align-items: center; padding: 3px 8px; border-radius: 999px; font-size: 12px; background: var(--gray-bg); color: var(--gray-text); }
+    .paid { background: var(--green-bg); color: var(--green-text); }
+    .stack { display: grid; gap: 5px; }
+    .empty { padding: 28px; text-align: center; color: var(--muted); background: var(--panel); border: 1px solid var(--line); }
+    @media (max-width: 760px) {
+      header { align-items: flex-start; flex-direction: column; }
+      main { padding: 14px; }
+    }
   </style>
 </head>
 <body>
-  <header><strong>Payment History</strong></header>
+  <header>
+    <strong>Historial de pagos</strong>
+    <a class="button" href="/dashboard">Volver al dashboard</a>
+  </header>
   <main>
-    <p><a href="/dashboard">Back to dashboard</a></p>
-    <h1>{{ user.first_name if user else "" }} {{ user.telegram_id if user else "" }}</h1>
-    <table>
-      <thead>
-        <tr>
-          <th>Date</th>
-          <th>Status</th>
-          <th>Admin</th>
-          <th>Receipt</th>
-          <th>Membership</th>
-          <th>Invite</th>
-          <th>Notes</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for row in history %}
-        <tr>
-          <td>{{ row.created_at }}</td>
-          <td><span class="badge">{{ row.payment_status }}</span></td>
-          <td>{{ row.admin_id or "-" }}</td>
-          <td>{{ row.receipt_file_type or "-" }} {{ row.receipt_file_id or "" }}</td>
-          <td>{{ row.membership_start_date or "-" }} to {{ row.expiry_date or "-" }}</td>
-          <td>{% if row.invite_link %}<button type="button" onclick="navigator.clipboard.writeText('{{ row.invite_link }}')">Copy</button>{% else %}-{% endif %}</td>
-          <td>{{ row.notes or "" }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    <section class="summary">
+      <strong>{{ user.first_name if user else "" }} {{ user.last_name if user else "" }}</strong>
+      <span>@{{ user.username if user and user.username else "-" }}</span>
+      <span class="muted">Telegram ID: {{ user.telegram_id if user else "-" }}</span>
+    </section>
+
+    {% if history %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Usuario</th>
+            <th>Admin</th>
+            <th>Estado</th>
+            <th>Link generado</th>
+            <th>Inicio</th>
+            <th>Expiración</th>
+            <th>Comprobante</th>
+            <th>Notas</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in history %}
+          <tr>
+            <td>{{ row.created_at or "-" }}</td>
+            <td>
+              <div class="stack">
+                <span>{{ row.telegram_id }}</span>
+                <span class="muted">@{{ row.username or "-" }} {{ row.first_name or "" }}</span>
+              </div>
+            </td>
+            <td>{{ row.admin_id or "-" }}</td>
+            <td><span class="badge {{ row.payment_status }}">{{ row.payment_status or row.action or "-" }}</span></td>
+            <td>
+              {% if row.invite_link %}
+                <button type="button" data-copy="{{ row.invite_link }}">Copiar link</button>
+              {% else %}
+                <span class="muted">-</span>
+              {% endif %}
+            </td>
+            <td>{{ row.membership_start_date or "-" }}</td>
+            <td>{{ row.expiry_date or "-" }}</td>
+            <td>
+              {% if row.receipt_file_id %}
+                <div class="stack">
+                  <span class="muted">{{ row.receipt_file_type or "archivo" }}</span>
+                  <a class="button" href="/dashboard/payments/{{ row.id }}/receipt" target="_blank" rel="noopener">Ver comprobante</a>
+                </div>
+              {% else %}
+                <span class="muted">Sin comprobante</span>
+              {% endif %}
+            </td>
+            <td>{{ row.notes or "" }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+      <div class="empty">Este usuario todavía no tiene pagos en historial.</div>
+    {% endif %}
   </main>
+  <script>
+    document.querySelectorAll("[data-copy]").forEach((button) => {
+      button.addEventListener("click", () => {
+        navigator.clipboard.writeText(button.dataset.copy || "");
+      });
+    });
+  </script>
 </body>
 </html>
