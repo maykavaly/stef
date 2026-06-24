@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Subscription Dashboard</title>
+  <style>
+    body { margin: 0; font-family: Arial, sans-serif; background: #f6f7f9; color: #1f2937; }
+    header { background: #111827; color: #fff; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; }
+    main { padding: 24px; }
+    table { width: 100%; border-collapse: collapse; background: #fff; }
+    th, td { padding: 10px; border-bottom: 1px solid #e5e7eb; text-align: left; vertical-align: top; }
+    th { font-size: 12px; text-transform: uppercase; color: #6b7280; background: #f9fafb; }
+    input, select, button { padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 6px; background: #fff; }
+    button { cursor: pointer; }
+    .toolbar { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+    .badge { display: inline-block; padding: 3px 8px; border-radius: 999px; font-size: 12px; background: #e5e7eb; }
+    .paid, .active { background: #dcfce7; color: #166534; }
+    .pending_review { background: #fef9c3; color: #854d0e; }
+    .needs_new_receipt { background: #ffedd5; color: #9a3412; }
+    .rejected, .expired { background: #fee2e2; color: #991b1b; }
+    .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+    .link-button { color: #2563eb; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <header>
+    <strong>Subscription Dashboard</strong>
+    <form method="post" action="/logout"><button type="submit">Logout</button></form>
+  </header>
+  <main>
+    <form class="toolbar" method="get" action="/dashboard">
+      <input name="search" placeholder="Search users" value="{{ search }}">
+      <select name="status">
+        <option value="">All statuses</option>
+        <option value="active" {% if status == "active" %}selected{% endif %}>Active</option>
+        <option value="inactive" {% if status == "inactive" %}selected{% endif %}>Inactive</option>
+      </select>
+      <select name="payment_status">
+        <option value="">All payments</option>
+        <option value="pending_review" {% if payment_status == "pending_review" %}selected{% endif %}>Pending</option>
+        <option value="paid" {% if payment_status == "paid" %}selected{% endif %}>Paid</option>
+        <option value="needs_new_receipt" {% if payment_status == "needs_new_receipt" %}selected{% endif %}>Needs receipt</option>
+        <option value="rejected" {% if payment_status == "rejected" %}selected{% endif %}>Rejected</option>
+        <option value="unpaid" {% if payment_status == "unpaid" %}selected{% endif %}>Unpaid</option>
+      </select>
+      <button type="submit">Filter</button>
+    </form>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Telegram ID</th>
+          <th>User</th>
+          <th>Payment</th>
+          <th>Status</th>
+          <th>Membership</th>
+          <th>Invite</th>
+          <th>Notes</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for user in users %}
+        <tr>
+          <td>
+            {{ user.telegram_id }}<br>
+            <button type="button" onclick="copyText('{{ user.telegram_id }}')">Copy ID</button>
+          </td>
+          <td>@{{ user.username or "-" }}<br>{{ user.first_name or "" }}</td>
+          <td><span class="badge {{ user.payment_status }}">{{ user.payment_status or "unpaid" }}</span></td>
+          <td>
+            <span class="badge {% if user.days_remaining is not none and user.days_remaining < 0 %}expired{% else %}{{ user.status }}{% endif %}">
+              {% if user.days_remaining is not none and user.days_remaining < 0 %}expired{% else %}{{ user.status or "inactive" }}{% endif %}
+            </span>
+          </td>
+          <td>
+            Start: {{ user.membership_start_date or "-" }}<br>
+            Expiry: {{ user.expiry_date or "-" }}<br>
+            Days: {{ user.days_remaining if user.days_remaining is not none else "-" }}
+          </td>
+          <td>
+            {% if user.invite_link %}
+              <button type="button" onclick="copyText('{{ user.invite_link }}')">Copy Link</button>
+            {% else %}
+              -
+            {% endif %}
+          </td>
+          <td>{{ user.notes or "" }}</td>
+          <td>
+            <div class="actions">
+              <form method="post" action="/dashboard/users/{{ user.telegram_id }}/renew-today"><button type="submit">Renew +30</button></form>
+              <form method="post" action="/dashboard/users/{{ user.telegram_id }}/mark-inactive"><button type="submit">Mark inactive</button></form>
+              <a class="link-button" href="/dashboard/users/{{ user.telegram_id }}/history">History</a>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </main>
+  <script>
+    function copyText(text) {
+      navigator.clipboard.writeText(text);
+    }
+  </script>
+</body>
+</html>
