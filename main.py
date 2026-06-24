@@ -270,11 +270,11 @@ def pending_payment_keyboard(telegram_id: int, selected_codes: set[str] | None =
         )
     for index in range(0, len(channel_buttons), 3):
         rows.append(channel_buttons[index : index + 3])
-    rows.append([InlineKeyboardButton(text="Approve selected ✅", callback_data=f"payment:approve:{telegram_id}")])
+    rows.append([InlineKeyboardButton(text="Aprobar seleccionados ✅", callback_data=f"payment:approve:{telegram_id}")])
     rows.append(
         [
-            InlineKeyboardButton(text="Reject ❌", callback_data=f"payment:reject:{telegram_id}"),
-            InlineKeyboardButton(text="Ask another receipt 🔁", callback_data=f"payment:ask:{telegram_id}"),
+            InlineKeyboardButton(text="Rechazar ❌", callback_data=f"payment:reject:{telegram_id}"),
+            InlineKeyboardButton(text="Pedir otro comprobante 🔁", callback_data=f"payment:ask:{telegram_id}"),
         ]
     )
     return InlineKeyboardMarkup(inline_keyboard=rows)
@@ -293,7 +293,7 @@ def selected_codes_from_message(callback: CallbackQuery) -> set[str]:
 
 
 async def send_invite_links_to_user(telegram_id: int, channel_links: list[tuple[str, str]]) -> bool:
-    body = ["Payment approved ✅", ""]
+    body = ["Pago aprobado ✅\nAquí está tu link de acceso:", ""]
     for label, invite_link in channel_links:
         body.append(f"{label}:")
         body.append(invite_link)
@@ -663,11 +663,11 @@ async def payment_receipt_handler(message: Message) -> None:
     )
     upsert_user(payload)
     if existing and existing.get("payment_status") == "pending_review":
-        await message.reply("Your previous receipt was updated ✅\nWe are reviewing your payment and will send access soon.")
+        await message.reply("Tu comprobante anterior fue actualizado ✅\nLo revisaremos y te enviaremos tu acceso en cuanto sea aprobado.")
         return
-    await message.reply("Receipt received ✅ We will review it manually.")
+    await message.reply("Comprobante recibido ✅ Lo revisaremos y te enviaremos tu acceso en cuanto sea aprobado.")
     caption = (
-        "New pending payment\n"
+        "Nuevo comprobante pendiente\n"
         f"telegram_id: {telegram_id}\n"
         f"username: @{message.from_user.username or '-'}\n"
         f"first_name: {message.from_user.first_name or '-'}\n"
@@ -757,7 +757,7 @@ async def payment_callback(callback: CallbackQuery) -> None:
             }
         )
         sent = await send_invite_links_to_user(telegram_id, channel_links)
-        await bot.send_message(settings.admin_chat_id, f"Payment approved for {telegram_id}. Links sent: {'yes' if sent else 'no'}")
+        await bot.send_message(settings.admin_chat_id, f"Pago aprobado para {telegram_id}. Link enviado: {'sí' if sent else 'no'}")
         await callback.answer("Approved ✅")
         return
     if action == "reject":
@@ -765,7 +765,7 @@ async def payment_callback(callback: CallbackQuery) -> None:
             {"payment_status": "rejected", "rejected_at": now_iso(), "notes": "Payment rejected by admin", "updated_at": now_iso()}
         ).eq("telegram_id", telegram_id).execute()
         try:
-            await bot.send_message(telegram_id, "Your receipt could not be validated. Please review it and try again.")
+            await bot.send_message(telegram_id, "No pudimos validar tu comprobante. Por favor revísalo y envíalo nuevamente.")
         except Exception:
             logger.warning("Could not DM rejection to %s", telegram_id, exc_info=True)
         await callback.answer("Rejected.")
@@ -780,7 +780,7 @@ async def payment_callback(callback: CallbackQuery) -> None:
             }
         ).eq("telegram_id", telegram_id).execute()
         try:
-            await bot.send_message(telegram_id, "Please send another clearer receipt screenshot.")
+            await bot.send_message(telegram_id, "Por favor envía nuevamente tu comprobante en una captura más clara.")
         except Exception:
             logger.warning("Could not DM receipt request to %s", telegram_id, exc_info=True)
         await callback.answer("Requested another receipt.")
