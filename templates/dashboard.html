@@ -42,6 +42,7 @@
     }
     button, .button { cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
     button:hover, .button:hover { border-color: #9aa7b8; }
+    button:disabled { cursor: not-allowed; opacity: .55; }
     .primary { background: var(--blue); border-color: var(--blue); color: #fff; }
     .logout { background: #fff; color: var(--dark); }
     .table-wrap { overflow-x: auto; border: 1px solid var(--line); background: var(--panel); }
@@ -64,6 +65,7 @@
     .warn { color: #92400e; border-color: #fde68a; background: #fffbeb; }
     .ok { color: #166534; border-color: #bbf7d0; background: #f0fdf4; }
     .linkish { color: var(--blue); border-color: #bfdbfe; background: #eff6ff; }
+    .notice { margin-bottom: 14px; padding: 10px 12px; border: 1px solid #bfdbfe; background: #eff6ff; color: #1e3a8a; border-radius: 6px; }
     .empty { padding: 28px; text-align: center; color: var(--muted); background: var(--panel); border: 1px solid var(--line); }
     @media (max-width: 860px) {
       header { align-items: flex-start; flex-direction: column; }
@@ -78,6 +80,10 @@
     <form method="post" action="/logout"><button class="logout" type="submit">Cerrar sesión</button></form>
   </header>
   <main>
+    {% if notice %}
+      <div class="notice">{{ notice }}</div>
+    {% endif %}
+
     <form class="toolbar" method="get" action="/dashboard">
       <input name="search" placeholder="Buscar por ID, usuario o nombre" value="{{ search }}">
       <select name="status">
@@ -147,9 +153,16 @@
               </div>
             </td>
             <td>
-              <span class="badge {% if user.days_remaining is not none and user.days_remaining < 0 %}expired{% else %}{{ user.status }}{% endif %}">
-                {% if user.days_remaining is not none and user.days_remaining < 0 %}expired{% else %}{{ user.status or "inactive" }}{% endif %}
-              </span>
+              <div class="stack">
+                <span class="badge {% if user.days_remaining is not none and user.days_remaining < 0 %}expired{% else %}{{ user.status }}{% endif %}">
+                  {% if user.days_remaining is not none and user.days_remaining < 0 %}expired{% else %}{{ user.status or "inactive" }}{% endif %}
+                </span>
+                {% if user.left_channel_at or user.removed_at %}
+                  <span class="muted">removido</span>
+                {% elif user.status != "active" %}
+                  <span class="muted">inactivo</span>
+                {% endif %}
+              </div>
             </td>
             <td>
               <div class="stack">
@@ -175,6 +188,9 @@
                 <form method="post" action="/dashboard/users/{{ user.telegram_id }}/mark-pending"><button class="small warn" type="submit">Marcar pendiente</button></form>
                 <form method="post" action="/dashboard/users/{{ user.telegram_id }}/needs-new-receipt"><button class="small warn" type="submit">Pedir nuevo comprobante</button></form>
                 <form method="post" action="/dashboard/users/{{ user.telegram_id }}/reject-payment"><button class="small danger" type="submit">Rechazar</button></form>
+                <form method="post" action="/dashboard/users/{{ user.telegram_id }}/remove-access" onsubmit="return confirm('¿Remover acceso de este usuario en sus canales activos?');">
+                  <button class="small danger" type="submit" {% if user.status != "active" %}disabled{% endif %}>Remover acceso</button>
+                </form>
                 <a class="button small linkish" href="/dashboard/users/{{ user.telegram_id }}/history">Ver historial</a>
                 {% if user.pending_payment_file_id %}
                   <a class="button small linkish" href="/dashboard/users/{{ user.telegram_id }}/receipt" target="_blank" rel="noopener">Ver comprobante</a>
