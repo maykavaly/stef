@@ -1,108 +1,201 @@
 <!doctype html>
-<html lang="en">
+<html lang="es">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Subscription Dashboard</title>
+  <title>Dashboard de suscripciones</title>
   <style>
-    body { margin: 0; font-family: Arial, sans-serif; background: #f6f7f9; color: #1f2937; }
-    header { background: #111827; color: #fff; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; }
-    main { padding: 24px; }
-    table { width: 100%; border-collapse: collapse; background: #fff; }
-    th, td { padding: 10px; border-bottom: 1px solid #e5e7eb; text-align: left; vertical-align: top; }
-    th { font-size: 12px; text-transform: uppercase; color: #6b7280; background: #f9fafb; }
-    input, select, button { padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 6px; background: #fff; }
-    button { cursor: pointer; }
-    .toolbar { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
-    .badge { display: inline-block; padding: 3px 8px; border-radius: 999px; font-size: 12px; background: #e5e7eb; }
-    .paid, .active { background: #dcfce7; color: #166534; }
-    .pending_review { background: #fef9c3; color: #854d0e; }
-    .needs_new_receipt { background: #ffedd5; color: #9a3412; }
-    .rejected, .expired { background: #fee2e2; color: #991b1b; }
-    .actions { display: flex; gap: 6px; flex-wrap: wrap; }
-    .link-button { color: #2563eb; text-decoration: none; }
+    :root {
+      color-scheme: light;
+      --bg: #f5f7fb;
+      --panel: #ffffff;
+      --line: #dfe5ee;
+      --text: #172033;
+      --muted: #667085;
+      --dark: #162033;
+      --blue: #1d4ed8;
+      --green-bg: #dcfce7;
+      --green-text: #166534;
+      --yellow-bg: #fef3c7;
+      --yellow-text: #92400e;
+      --orange-bg: #ffedd5;
+      --orange-text: #9a3412;
+      --red-bg: #fee2e2;
+      --red-text: #991b1b;
+      --gray-bg: #eef2f7;
+      --gray-text: #344054;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Arial, sans-serif; background: var(--bg); color: var(--text); }
+    header { background: var(--dark); color: #fff; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+    header strong { font-size: 18px; }
+    main { padding: 22px; }
+    .toolbar { display: grid; grid-template-columns: minmax(220px, 1fr) 180px 190px auto; gap: 10px; margin-bottom: 16px; align-items: center; }
+    input, select, button, .button {
+      min-height: 34px;
+      padding: 8px 10px;
+      border: 1px solid #cfd6e0;
+      border-radius: 6px;
+      background: #fff;
+      color: var(--text);
+      font: inherit;
+    }
+    button, .button { cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+    button:hover, .button:hover { border-color: #9aa7b8; }
+    .primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+    .logout { background: #fff; color: var(--dark); }
+    .table-wrap { overflow-x: auto; border: 1px solid var(--line); background: var(--panel); }
+    table { width: 100%; border-collapse: collapse; min-width: 1180px; }
+    th, td { padding: 11px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); background: #f8fafc; position: sticky; top: 0; z-index: 1; }
+    tr:last-child td { border-bottom: 0; }
+    .id-cell { white-space: nowrap; }
+    .muted { color: var(--muted); font-size: 12px; }
+    .stack { display: grid; gap: 5px; }
+    .badge { display: inline-flex; width: fit-content; align-items: center; padding: 3px 8px; border-radius: 999px; font-size: 12px; background: var(--gray-bg); color: var(--gray-text); }
+    .paid, .active, .approved-receipt { background: var(--green-bg); color: var(--green-text); }
+    .pending_review, .pending-receipt { background: var(--yellow-bg); color: var(--yellow-text); }
+    .needs_new_receipt { background: var(--orange-bg); color: var(--orange-text); }
+    .rejected, .expired { background: var(--red-bg); color: var(--red-text); }
+    .actions { display: flex; gap: 6px; flex-wrap: wrap; max-width: 360px; }
+    .actions form { margin: 0; }
+    .small { min-height: 28px; padding: 5px 8px; font-size: 12px; }
+    .danger { color: #991b1b; border-color: #fecaca; background: #fff7f7; }
+    .warn { color: #92400e; border-color: #fde68a; background: #fffbeb; }
+    .ok { color: #166534; border-color: #bbf7d0; background: #f0fdf4; }
+    .linkish { color: var(--blue); border-color: #bfdbfe; background: #eff6ff; }
+    .empty { padding: 28px; text-align: center; color: var(--muted); background: var(--panel); border: 1px solid var(--line); }
+    @media (max-width: 860px) {
+      header { align-items: flex-start; flex-direction: column; }
+      .toolbar { grid-template-columns: 1fr; }
+      main { padding: 14px; }
+    }
   </style>
 </head>
 <body>
   <header>
-    <strong>Subscription Dashboard</strong>
-    <form method="post" action="/logout"><button type="submit">Logout</button></form>
+    <strong>Dashboard de suscripciones</strong>
+    <form method="post" action="/logout"><button class="logout" type="submit">Cerrar sesión</button></form>
   </header>
   <main>
     <form class="toolbar" method="get" action="/dashboard">
-      <input name="search" placeholder="Search users" value="{{ search }}">
+      <input name="search" placeholder="Buscar por ID, usuario o nombre" value="{{ search }}">
       <select name="status">
-        <option value="">All statuses</option>
-        <option value="active" {% if status == "active" %}selected{% endif %}>Active</option>
-        <option value="inactive" {% if status == "inactive" %}selected{% endif %}>Inactive</option>
+        <option value="">Todos los estados</option>
+        <option value="active" {% if status == "active" %}selected{% endif %}>Activos</option>
+        <option value="inactive" {% if status == "inactive" %}selected{% endif %}>Inactivos</option>
       </select>
       <select name="payment_status">
-        <option value="">All payments</option>
-        <option value="pending_review" {% if payment_status == "pending_review" %}selected{% endif %}>Pending</option>
-        <option value="paid" {% if payment_status == "paid" %}selected{% endif %}>Paid</option>
-        <option value="needs_new_receipt" {% if payment_status == "needs_new_receipt" %}selected{% endif %}>Needs receipt</option>
-        <option value="rejected" {% if payment_status == "rejected" %}selected{% endif %}>Rejected</option>
-        <option value="unpaid" {% if payment_status == "unpaid" %}selected{% endif %}>Unpaid</option>
+        <option value="">Todos los pagos</option>
+        <option value="pending_review" {% if payment_status == "pending_review" %}selected{% endif %}>Pendientes</option>
+        <option value="paid" {% if payment_status == "paid" %}selected{% endif %}>Pagados</option>
+        <option value="needs_new_receipt" {% if payment_status == "needs_new_receipt" %}selected{% endif %}>Pedir comprobante</option>
+        <option value="rejected" {% if payment_status == "rejected" %}selected{% endif %}>Rechazados</option>
+        <option value="unpaid" {% if payment_status == "unpaid" %}selected{% endif %}>Sin pagar</option>
       </select>
-      <button type="submit">Filter</button>
+      <button class="primary" type="submit">Filtrar</button>
     </form>
 
-    <table>
-      <thead>
-        <tr>
-          <th>Telegram ID</th>
-          <th>User</th>
-          <th>Payment</th>
-          <th>Status</th>
-          <th>Membership</th>
-          <th>Invite</th>
-          <th>Notes</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for user in users %}
-        <tr>
-          <td>
-            {{ user.telegram_id }}<br>
-            <button type="button" onclick="copyText('{{ user.telegram_id }}')">Copy ID</button>
-          </td>
-          <td>@{{ user.username or "-" }}<br>{{ user.first_name or "" }}</td>
-          <td><span class="badge {{ user.payment_status }}">{{ user.payment_status or "unpaid" }}</span></td>
-          <td>
-            <span class="badge {% if user.days_remaining is not none and user.days_remaining < 0 %}expired{% else %}{{ user.status }}{% endif %}">
-              {% if user.days_remaining is not none and user.days_remaining < 0 %}expired{% else %}{{ user.status or "inactive" }}{% endif %}
-            </span>
-          </td>
-          <td>
-            Start: {{ user.membership_start_date or "-" }}<br>
-            Expiry: {{ user.expiry_date or "-" }}<br>
-            Days: {{ user.days_remaining if user.days_remaining is not none else "-" }}
-          </td>
-          <td>
-            {% if user.invite_link %}
-              <button type="button" onclick="copyText('{{ user.invite_link }}')">Copy Link</button>
-            {% else %}
-              -
-            {% endif %}
-          </td>
-          <td>{{ user.notes or "" }}</td>
-          <td>
-            <div class="actions">
-              <form method="post" action="/dashboard/users/{{ user.telegram_id }}/renew-today"><button type="submit">Renew +30</button></form>
-              <form method="post" action="/dashboard/users/{{ user.telegram_id }}/mark-inactive"><button type="submit">Mark inactive</button></form>
-              <a class="link-button" href="/dashboard/users/{{ user.telegram_id }}/history">History</a>
-            </div>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    {% if users %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Telegram ID</th>
+            <th>Usuario</th>
+            <th>Pago</th>
+            <th>Comprobante</th>
+            <th>Estado</th>
+            <th>Membresía</th>
+            <th>Invitación</th>
+            <th>Notas</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for user in users %}
+          <tr>
+            <td class="id-cell">
+              <div class="stack">
+                <strong>{{ user.telegram_id }}</strong>
+                <button class="small" type="button" data-copy="{{ user.telegram_id }}">Copiar ID</button>
+              </div>
+            </td>
+            <td>
+              <div class="stack">
+                <span>@{{ user.username or "-" }}</span>
+                <span class="muted">{{ user.first_name or "" }} {{ user.last_name or "" }}</span>
+              </div>
+            </td>
+            <td>
+              <span class="badge {{ user.payment_status }}">{{ user.payment_status or "unpaid" }}</span>
+            </td>
+            <td>
+              <div class="stack">
+                {% if user.pending_payment_file_id %}
+                  {% if user.payment_status == "paid" %}
+                    <span class="badge approved-receipt">aprobado</span>
+                  {% elif user.payment_status == "pending_review" %}
+                    <span class="badge pending-receipt">pendiente</span>
+                  {% else %}
+                    <span class="badge">{{ user.pending_payment_file_type or "archivo" }}</span>
+                  {% endif %}
+                  <a class="button small linkish" href="/dashboard/users/{{ user.telegram_id }}/receipt" target="_blank" rel="noopener">Ver comprobante</a>
+                {% else %}
+                  <span class="muted">Sin comprobante</span>
+                {% endif %}
+              </div>
+            </td>
+            <td>
+              <span class="badge {% if user.days_remaining is not none and user.days_remaining < 0 %}expired{% else %}{{ user.status }}{% endif %}">
+                {% if user.days_remaining is not none and user.days_remaining < 0 %}expired{% else %}{{ user.status or "inactive" }}{% endif %}
+              </span>
+            </td>
+            <td>
+              <div class="stack">
+                <span>Inicio: {{ user.membership_start_date or "-" }}</span>
+                <span>Expira: {{ user.expiry_date or "-" }}</span>
+                <span class="muted">Días: {{ user.days_remaining if user.days_remaining is not none else "-" }}</span>
+              </div>
+            </td>
+            <td>
+              {% if user.invite_link %}
+                <button class="small" type="button" data-copy="{{ user.invite_link }}">Copiar link</button>
+              {% else %}
+                <span class="muted">-</span>
+              {% endif %}
+            </td>
+            <td>{{ user.notes or "" }}</td>
+            <td>
+              <div class="actions">
+                <form method="post" action="/dashboard/users/{{ user.telegram_id }}/renew-today"><button class="small ok" type="submit">Renovar +30 hoy</button></form>
+                <form method="post" action="/dashboard/users/{{ user.telegram_id }}/renew-from-expiry"><button class="small ok" type="submit">Renovar +30 expiración</button></form>
+                <form method="post" action="/dashboard/users/{{ user.telegram_id }}/mark-inactive"><button class="small" type="submit">Marcar inactivo</button></form>
+                <form method="post" action="/dashboard/users/{{ user.telegram_id }}/mark-paid"><button class="small ok" type="submit">Marcar pagado</button></form>
+                <form method="post" action="/dashboard/users/{{ user.telegram_id }}/mark-pending"><button class="small warn" type="submit">Marcar pendiente</button></form>
+                <form method="post" action="/dashboard/users/{{ user.telegram_id }}/needs-new-receipt"><button class="small warn" type="submit">Pedir nuevo comprobante</button></form>
+                <form method="post" action="/dashboard/users/{{ user.telegram_id }}/reject-payment"><button class="small danger" type="submit">Rechazar</button></form>
+                <a class="button small linkish" href="/dashboard/users/{{ user.telegram_id }}/history">Ver historial</a>
+                {% if user.pending_payment_file_id %}
+                  <a class="button small linkish" href="/dashboard/users/{{ user.telegram_id }}/receipt" target="_blank" rel="noopener">Ver comprobante</a>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+      <div class="empty">No hay usuarios para los filtros actuales.</div>
+    {% endif %}
   </main>
   <script>
-    function copyText(text) {
-      navigator.clipboard.writeText(text);
-    }
+    document.querySelectorAll("[data-copy]").forEach((button) => {
+      button.addEventListener("click", () => {
+        navigator.clipboard.writeText(button.dataset.copy || "");
+      });
+    });
   </script>
 </body>
 </html>
