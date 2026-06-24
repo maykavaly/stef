@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
 import uvicorn
@@ -320,6 +321,10 @@ def redirect(path: str) -> RedirectResponse:
     return RedirectResponse(path, status_code=303)
 
 
+def dashboard_notice(message: str) -> RedirectResponse:
+    return redirect(f"/dashboard?notice={quote(message)}")
+
+
 def receipt_media_type(file_type: str | None) -> str:
     if file_type == "photo":
         return "image/jpeg"
@@ -371,7 +376,7 @@ async def logout(request: Request):
 
 
 @app.get("/dashboard", response_class=HTMLResponse, response_model=None)
-async def dashboard(request: Request, status: str = "", payment_status: str = "", search: str = ""):
+async def dashboard(request: Request, status: str = "", payment_status: str = "", search: str = "", notice: str = ""):
     if not auth_required(request):
         return redirect("/login")
     query = supabase.table("telegram_users").select("*").order("registered_at", desc=True).limit(100)
@@ -396,7 +401,7 @@ async def dashboard(request: Request, status: str = "", payment_status: str = ""
     return templates.TemplateResponse(
         request,
         "dashboard.html",
-        {"users": users, "status": status, "payment_status": payment_status, "search": search},
+        {"users": users, "status": status, "payment_status": payment_status, "search": search, "notice": notice},
     )
 
 
@@ -493,6 +498,70 @@ async def dashboard_reject_payment(request: Request, telegram_id: int):
         }
     ).eq("telegram_id", telegram_id).execute()
     return redirect("/dashboard")
+
+
+@app.post("/dashboard/users/{telegram_id}/remove-access", response_model=None)
+async def dashboard_remove_access(request: Request, telegram_id: int):
+    if not auth_required(request):
+        return redirect("/login")
+    active_access = (
+        supabase.table("user_channel_access")
+        .select("*")
+        .eq("telegram_id", telegram_id)
+        .eq("status", "active")
+        .execute()
+        .data
+        or []
+    )
+    if not active_access:
+        return dashboard_notice("No tenía accesos activos")
+
+    removed_at = now_iso()
+    successful_removals = 0
+    failed_removals = 0
+    for access in active_access:
+        try:
+            chat_id = int(str(access.get("telegram_chat_id")))
+            await remove_user_from_chat(chat_id, telegram_id)
+        except Exception:
+            failed_removals += 1
+            logger.warning(
+                "Dashboard manual removal failed for telegram_id=%s channel_code=%s chat_id=%s",
+                telegram_id,
+                access.get("channel_code"),
+                access.get("telegram_chat_id"),
+                exc_info=True,
+            )
+            continue
+
+        successful_removals += 1
+        supabase.table("user_channel_access").update(
+            {
+                "status": "inactive",
+                "removed_at": removed_at,
+                "removal_reason": "dashboard_manual_remove",
+                "updated_at": removed_at,
+            }
+        ).eq("id", access.get("id")).execute()
+
+    user = get_user(telegram_id)
+    existing_notes = str(user.get("notes") or "").strip() if user else ""
+    removal_note = f"Removido desde dashboard en {removed_at}"
+    notes = f"{existing_notes}\n{removal_note}" if existing_notes else removal_note
+    supabase.table("telegram_users").update(
+        {
+            "status": "inactive",
+            "left_channel_at": removed_at,
+            "updated_at": removed_at,
+            "notes": notes,
+        }
+    ).eq("telegram_id", telegram_id).execute()
+
+    if failed_removals:
+        return dashboard_notice("Usuario removido parcialmente")
+    if successful_removals:
+        return dashboard_notice("Usuario removido correctamente")
+    return dashboard_notice("Usuario removido parcialmente")
 
 
 @app.get("/dashboard/users/{telegram_id}/receipt", response_model=None)
